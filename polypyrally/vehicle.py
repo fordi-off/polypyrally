@@ -181,13 +181,13 @@ class Car:
         return (p[0] + R[0] * lx + R[1] * ly + R[2] * lz, p[1] + R[3] * lx + R[4] * ly + R[5] * lz, p[2] + R[6] * lx + R[7] * ly + R[8] * lz)
 
     # ------------------------------------------------------------------ control + step
-    def control(self, dt, thr, brk, steer, hb, up=False, down=False):
+    def control(self, dt, thr, brk, steer, hb, up=False, down=False, allow_reverse=True):
         s = self.spec
         # throttle / brake eased in like pedals; steering speed-sensitive
         sp0 = self.speed
-        if brk > 0.2 and thr < 0.05 and sp0 < 1.0:           # standing still and holding brake -> reverse gear
+        if allow_reverse and brk > 0.2 and thr < 0.05 and sp0 < 1.0 and not hb:   # standing still and holding brake -> reverse
             self.gear = -1
-        elif thr > 0.05 and self.gear < 0 and sp0 > -1.0:
+        elif (thr > 0.05 or not allow_reverse) and self.gear < 0:
             self.gear = 1
         if self.gear < 0:
             thr, brk = brk, 0.0

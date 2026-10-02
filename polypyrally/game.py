@@ -89,17 +89,21 @@ class Game:
             brk = keys['axis_brake']
         if self.state == 'pause':
             return
+        hold = False
         if self.state == 'countdown':
             self.countdown -= dt
-            thr, brk = 0.0, 1.0
+            thr, brk, steer = 0.0, 0.0, 0.0
+            hold = True
             if self.countdown <= 0:
                 self.state = 'run'
         elif self.state == 'run':
             self.time += dt
         elif self.state == 'finished':
-            thr, brk = 0.0, 0.8
+            thr, brk = 0.0, 0.7 if car.speed > 2.0 else 0.0
             steer = 0.0
-        car.control(dt, thr, brk, steer, 1.0 if keys['hand'] else 0.0, keys.get('up', False), keys.get('down', False))
+            hold = car.speed <= 2.0
+        car.control(dt, thr, brk, steer, 1.0 if (keys['hand'] or hold) else 0.0, keys.get('up', False), keys.get('down', False),
+                    allow_reverse=self.state == 'run')
         car.step(dt)
         self.idx = st.nearest(car.p[0], car.p[2], self.idx, 60)
         self.progress = self.idx * st.ds
