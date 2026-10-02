@@ -113,9 +113,9 @@ class Audio:
         sp = abs(car.speed)
         grounded = sum(1 for w in car.wheels if w.contact)
         self.wind.set_volume(min(1.0, sp / 60.0) * 0.5 * self.volume)
-        slip = max((w.slip for w in car.wheels if w.contact), default=0.0)
-        self.gravel.set_volume(min(1.0, sp / 35.0) * (grounded / 4.0) * 0.45 * self.volume)
-        self.skid.set_volume(min(1.0, max(0.0, slip - 1.2) * 0.4) * min(1.0, sp / 8.0) * 0.5 * self.volume)
+        ss = max((abs(w.sx) + abs(w.Fy) / max(w.load, 500.0) * 6.0 for w in car.wheels if w.contact), default=0.0)
+        self.gravel.set_volume(min(1.0, sp / 35.0 + ss * 0.04) * (grounded / 4.0) * 0.5 * self.volume)
+        self.skid.set_volume(min(1.0, max(0.0, ss - 1.5) * 0.12) * 0.75 * self.volume)       # wheelspin / sliding roar
         # turbo whistle: pitch follows rpm, level follows boost
         pos_w = min(2.999, max(0.0, (rf - 0.25) / 0.75 * 3.0))
         iw, fw = int(pos_w), pos_w - int(pos_w)

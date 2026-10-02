@@ -7,6 +7,7 @@ from .mathx import ortho, look_at, gl_bytes, perspective
 
 VFMT = '3f 3f 3f 2f'
 MAX_PART = 2300 * 18
+TRACK_CAP = 7000
 
 
 class GLMesh:
@@ -113,6 +114,8 @@ class Renderer:
         self.part_prog = ctx.program(vertex_shader=shaders.PART_VS, fragment_shader=shaders.PART_FS)
         self.part_buf = ctx.buffer(reserve=MAX_PART * 9 * 4)
         self.part_vao = ctx.vertex_array(self.part_prog, [(self.part_buf, '3f 2f 4f', 'in_pos', 'in_uv', 'in_col')])
+        self.track_buf = ctx.buffer(reserve=TRACK_CAP * 6 * 9 * 4)
+        self.track_vao = ctx.vertex_array(self.part_prog, [(self.track_buf, '3f 2f 4f', 'in_pos', 'in_uv', 'in_col')])
         self.post_vao = ctx.vertex_array(self.post_prog, [])
         self.bloom_vao = ctx.vertex_array(self.bloom_prog, [])
 
@@ -253,7 +256,7 @@ class Renderer:
             _set(prog, 'u_focus', tuple(focus))
             _set(prog, 'u_gloss', 0.0)
         self._draw_geometry(fr, False, np.asarray(fr.cam_pos), 1e9)
-        if fr.particles is not None and len(fr.particles):
+        if (fr.particles is not None and len(fr.particles)) or fr.tracks is not None:
             pp = self.part_prog
             _set(pp, 'u_vp', gl_bytes(vp))
             _set(pp, 'u_cam', tuple(fr.cam_pos))
@@ -264,9 +267,17 @@ class Renderer:
             ctx.enable(moderngl.BLEND)
             ctx.blend_func = (moderngl.SRC_ALPHA, moderngl.ONE_MINUS_SRC_ALPHA)
             ctx.depth_mask = False
-            data = np.ascontiguousarray(fr.particles, dtype=np.float32)
-            self.part_buf.write(data.tobytes()[:MAX_PART * 9 * 4])
-            self.part_vao.render(moderngl.TRIANGLES, vertices=min(len(data), MAX_PART))
+            if fr.tracks is not None:
+                verts, count, dirty = fr.tracks
+                if dirty is not None:
+                    a, b = dirty
+                    self.track_buf.write(np.ascontiguousarray(verts[a * 6:(b + 1) * 6]).tobytes(), offset=a * 6 * 36)
+                if count:
+                    self.track_vao.render(moderngl.TRIANGLES, vertices=count * 6)
+            if fr.particles is not None and len(fr.particles):
+                data = np.ascontiguousarray(fr.particles, dtype=np.float32)
+                self.part_buf.write(data.tobytes()[:MAX_PART * 9 * 4])
+                self.part_vao.render(moderngl.TRIANGLES, vertices=min(len(data), MAX_PART))
             ctx.depth_mask = True
             ctx.disable(moderngl.BLEND)
         # ---- resolve + bloom

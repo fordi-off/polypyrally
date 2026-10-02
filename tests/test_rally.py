@@ -55,21 +55,57 @@ def test_car_rests_on_its_springs():
     assert car.up[1] > 0.97 and abs(car.speed) < 0.2
 
 
+class Flat:
+    """A perfectly flat gravel plane, for dynamics tests."""
+    def height_normal(self, x, z):
+        return 0.0, 0.0, 1.0, 0.0
+
+    def height(self, x, z):
+        return 0.0
+
+    def road_distance(self, x, z):
+        return 0.0
+
+
+def flat_car():
+    car = Car(Flat())
+    car.reset(0.0, 0.0, 0.0, 0.0)
+    for _ in range(120):
+        car.control(1 / 60, 0, 0, 0, 1.0)
+        car.step(1 / 60)
+    return car
+
+
 def test_front_wheel_drive_and_manual_gearbox():
-    car = settled_car()
+    car = flat_car()
     car.auto = False
     car.tc = False
     assert car.spec.front_split == 1.0
-    for _ in range(60 * 4):
+    for _ in range(60 * 2):
         car.control(1 / 60, 1.0, 0, 0, 0)
         car.step(1 / 60)
     assert car.gear == 1                                          # manual: it stays in gear until told otherwise
     assert car.rpm > 5000
-    rear = max(abs(w.Fx) for w in car.wheels[2:])
-    front = max(abs(w.Fx) for w in car.wheels[:2])
-    assert front > 4 * rear                                       # only the front axle drives
+    front = sum(w.Fx for w in car.wheels[:2])
+    rear = sum(abs(w.Fx) for w in car.wheels[2:])
+    assert front > 2000 and rear < 0.2 * front                    # only the front axle drives
     car.control(1 / 60, 1.0, 0, 0, 0, up=True)
     assert car.gear == 2
+
+
+def test_wheelspin_is_real_and_traction_control_removes_it():
+    spin = {}
+    for tc in (False, True):
+        car = flat_car()
+        car.tc = tc
+        car.auto = False
+        worst = 0.0
+        for _ in range(60 * 2):
+            car.control(1 / 60, 1.0, 0, 0, 0)
+            car.step(1 / 60)
+            worst = max(worst, max(w.kappa for w in car.wheels[:2]))
+        spin[tc] = worst
+    assert spin[False] > 0.6 and spin[True] < 0.45 and spin[True] < spin[False] * 0.6, spin
 
 
 def test_throttle_in_the_air_does_not_crash():

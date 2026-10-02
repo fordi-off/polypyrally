@@ -13,4 +13,5 @@ class Frame:
         self.inst_shadow = []     # (GLMesh, GLInstances) drawn in the shadow passes
         self.models = []          # (GLMesh, 4x4 model matrix, gloss)
         self.ui = None
+        self.tracks = None        # (vertex array, quad count, dirty quad range) from tracks.Tracks
         self.particles = None     # float32 (N, 9) vertices: pos3 uv2 rgba4

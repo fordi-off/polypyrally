@@ -33,7 +33,7 @@ class CarSpec:
     """A front-drive rally hatchback: 1150 kg, 61 % of it over the front axle, centre of mass low and forward."""
     name: str = 'Pulse GTR hatch'
     mass: float = 1150.0
-    inertia: tuple = (400.0, 1650.0, 1500.0)          # about x (roll), y (yaw), z (pitch)
+    inertia: tuple = (400.0, 1450.0, 1500.0)          # about x (roll), y (yaw), z (pitch)
     wheel_r: float = 0.31
     wheel_i: float = 1.0
     wheel_x: tuple = (1.00, -1.55)                    # front, rear axle positions (body x); wheelbase 2.55 m
@@ -79,7 +79,7 @@ TYRE_SLOPE = PEAK_C * B_TYRE
 
 class Wheel:
     __slots__ = ('ax', 'az', 'front', 'k', 'cb', 'cr', 'om', 'angle', 'steer', 'x', 'comp', 'load', 'contact', 'Fx', 'Fy',
-                 'slip', 'cx', 'cy', 'cz', 'hx', 'hy', 'hz', 'mu', 'side', 'surf', 'kappa')
+                 'slip', 'cx', 'cy', 'cz', 'hx', 'hy', 'hz', 'mu', 'side', 'surf', 'kappa', 'sx')
 
     def __init__(self, ax, az, front, k, cb, cr):
         self.ax, self.az, self.front, self.k, self.cb, self.cr = ax, az, front, k, cb, cr
@@ -94,6 +94,7 @@ class Wheel:
         self.Fx = self.Fy = 0.0
         self.slip = 0.0
         self.kappa = 0.0
+        self.sx = 0.0
         self.cx = self.cy = self.cz = 0.0
         self.hx = self.hy = self.hz = 0.0
         self.mu = 0.8
@@ -104,14 +105,14 @@ def _surface(stage, x, z):
     """(peak friction, rolling resistance) from the distance to the road."""
     d = stage.road_distance(x, z)
     if d < 2.3:                                   # the packed, worn driving line
-        return 0.96, 0.020
+        return 0.92, 0.020
     if d < 4.6:                                   # loose gravel toward the edges
         t = (d - 2.3) / 2.3
-        return 0.96 - 0.11 * t, 0.020 + 0.018 * t
+        return 0.92 - 0.12 * t, 0.020 + 0.018 * t
     if d < 7.0:                                   # verge, then grass
         t = (d - 4.6) / 2.4
-        return 0.85 - 0.22 * t, 0.038 + 0.04 * t
-    return 0.63, 0.078
+        return 0.80 - 0.18 * t, 0.038 + 0.04 * t
+    return 0.62, 0.078
 
 
 class Car:
@@ -127,7 +128,7 @@ class Car:
                      (1.6, 0.2, 0.8), (1.6, 0.2, -0.8), (-1.9, 0.34, 0.8), (-1.9, 0.34, -0.8),
                      (-0.1, 0.94, 0.68), (-0.1, 0.94, -0.68), (-1.25, 0.93, 0.68), (-1.25, 0.93, -0.68), (1.98, 0.0, 0.0), (-2.0, 0.3, 0.0)]
         self.auto = False                                  # manual gearbox: Q / E shift
-        self.tc = True                                     # traction control assist
+        self.tc = False                                    # traction control assist (off: wheelspin is part of the fun)
         self.reset(0.0, 0.0, 0.0, 0.0)
         self.t = 0.0
 
@@ -408,12 +409,13 @@ class Car:
             vlong = vpx * fx_ + vpy * fy_ + vpz * fz_
             vlat = vpx * lx_ + vpy * ly_ + vpz * lz_
             mu, crr = _surface(st, wl.cx, wl.cz)
-            Fmax = mu * Fs
+            Fmax = mu * Fs * max(0.7, min(1.15, 1.12 - 0.04 * Fs / 1000.0))      # load sensitivity: light tyres grip better per newton
             den_v = abs(vlong) + 1.4
             sx = wl.om * Rw - vlong
             wl.kappa = sx / den_v
-            sk = sx / den_v / 0.15
-            sa = -vlat / den_v / 0.20
+            wl.sx = sx
+            sk = sx / den_v / 0.17
+            sa = -vlat / den_v / 0.26
             if sk > 3.0:                                  # a spinning tyre still keeps some sideways grip
                 sk = 3.0
             elif sk < -3.0:
@@ -425,7 +427,7 @@ class Car:
                 Fy = f * sa / sm
             else:
                 Fx = Fy = 0.0
-            K = Fmax * TYRE_SLOPE / (0.15 * den_v)
+            K = Fmax * TYRE_SLOPE / (0.17 * den_v)
             domega = dt * (Tdrv[wi] - Rw * Fx) / (Iw + dt * Rw * Rw * K)
             Tb = self._brake_t(wl)
             if Tb > 0.0:

@@ -32,7 +32,7 @@ class Camera:
         if v > 6.0:
             va = math.atan2(car.v[2], car.v[0])
             d = (va - head + math.pi) % math.tau - math.pi
-            ang = head + d * 0.45
+            ang = head + d * 0.3
         if self.first:
             self.yaw = ang
         d = (ang - self.yaw + math.pi) % math.tau - math.pi
@@ -55,7 +55,10 @@ class Camera:
                 self.pos += (want - self.pos) * (1 - math.exp(-dt * 9.0))
             tgt = cp + np.array([math.cos(self.yaw), 0, math.sin(self.yaw)]) * 5.5 + np.array([0, 1.0, 0])
             self.target += (tgt - self.target) * (1 - math.exp(-dt * 12.0)) if not self.first else (tgt - self.target)
-            up = np.array([0.0, 1.0, 0.0])
+            lat = car.speed * car.w[1]                           # centripetal acceleration (+ when turning left)
+            tilt = max(-0.07, min(0.07, lat * 0.0045))
+            rgt = np.array([-math.sin(self.yaw), 0.0, math.cos(self.yaw)])
+            up = np.array([0.0, 1.0, 0.0]) + rgt * tilt
         else:
             up = np.array(car.up)
             if mode == 'hood':

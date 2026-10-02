@@ -12,6 +12,7 @@ from .frame import Frame
 from .world import World
 from .camera import Camera
 from .particles import Particles
+from .tracks import Tracks
 from .hud import Hud
 from .mathx import transform, rot_y, rot_z
 from . import car_model, props
@@ -28,6 +29,7 @@ class Game:
         self.paint = (214, 44, 40)
         self.cam = Camera()
         self.parts = Particles()
+        self.tracks = Tracks()
         self.audio_enabled = audio
         self._dt = 1 / 60
         self.audio = None
@@ -68,6 +70,7 @@ class Game:
         self.toast = ''
         self.toast_t = 0.0
         self.parts.n = 0
+        self.tracks.clear()
         self.cam.first = True
         self.world.update(self.car.p[0], self.car.p[2], force=True, focus=(self.car.p[0], self.car.p[2]))
 
@@ -132,20 +135,30 @@ class Game:
         self.toast, self.toast_t = msg, 1.4
 
     def _fx(self, dt):
+        """Dust, flying gravel and tyre marks, driven by how fast each tyre is sliding over the ground."""
         car = self.car
         rnd = self.parts.rng
         sp = abs(car.speed)
+        self.tracks.feed(car, self.stage)
+        fwd = np.array(car.forward)
         for wl in car.wheels:
-            if not wl.contact or sp < 2.0:
+            if not wl.contact:
                 continue
-            rate = (0.04 * sp + 0.6 * max(0.0, wl.slip - 0.9)) * 18 * dt
+            # slip speed of the contact patch: wheelspin (longitudinal) plus sliding sideways
+            ss = abs(wl.sx) + abs(wl.Fy) / max(wl.load, 500.0) * 6.0
+            rate = (0.05 * sp + 0.9 * max(0.0, ss - 1.0)) * 16 * dt
             n = int(rate) + (1 if rnd.rand() < rate - int(rate) else 0)
+            dust = (0.64, 0.54, 0.42) if wl.mu > 0.72 else (0.36, 0.42, 0.22)
             if n:
-                d = np.array(car.forward) * -sp * 0.15
-                dust = (0.62, 0.52, 0.40) if wl.mu > 0.7 else (0.34, 0.40, 0.2)
-                self.parts.emit((wl.cx, wl.cy + 0.1, wl.cz), d + np.array([0, 0.8, 0]), n, 1.6, 0.35, 1.0, dust, 0.5 if wl.slip > 1 else 0.3)
-        if car.thr > 0.7 and sp < 10 and car.shift_t <= 0:
-            pass
+                d = fwd * -sp * 0.18 + np.array([0, 0.9, 0])
+                self.parts.emit((wl.cx, wl.cy + 0.12, wl.cz), d, min(n, 6), 1.5 + min(1.0, ss * 0.06), 0.30 + min(0.35, ss * 0.02), 1.3 + min(1.5, ss * 0.1), dust, min(0.62, 0.22 + ss * 0.02))
+            if ss > 4.0:                                   # gravel thrown backwards and up by a spinning tyre
+                g = ss * 22 * dt * 0.6
+                m = int(g) + (1 if rnd.rand() < g - int(g) else 0)
+                if m:
+                    back = -fwd * (min(ss, 25.0) * 0.55 + sp * 0.2) * (1.0 if wl.sx > 0 else -1.0 if False else 1.0)
+                    self.parts.emit((wl.cx, wl.cy + 0.1, wl.cz), back + np.array([0, 3.5 + min(ss, 20.0) * 0.18, 0]), min(m, 5), 0.8, 0.055, 0.0,
+                                    (0.30, 0.26, 0.22) if wl.mu > 0.72 else (0.24, 0.2, 0.14), 1.0, spread=1.3, grav=9.0, drag=0.2)
 
     # ------------------------------------------------------------------ draw
     def draw(self, ui=None):
@@ -175,6 +188,8 @@ class Game:
         right /= (np.linalg.norm(right) + 1e-9)
         upv = np.cross(right, np.array(self.cam.forward))
         fr.particles = self.parts.vertices(right, upv)
+        fr.tracks = (self.tracks.verts, self.tracks.count, self.tracks.dirty)
+        self.tracks.dirty = None
         fr.ui = ui
         r.render(fr)
 

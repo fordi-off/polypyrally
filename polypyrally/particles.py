@@ -16,9 +16,11 @@ class Particles:
         self.grow = np.zeros(MAX)
         self.col = np.zeros((MAX, 3))
         self.alpha = np.zeros(MAX)
+        self.grav = np.zeros(MAX)
+        self.drag = np.ones(MAX) * 1.6
         self.rng = np.random.RandomState(5)
 
-    def emit(self, pos, vel, count, life, size, grow, col, alpha, spread=0.6):
+    def emit(self, pos, vel, count, life, size, grow, col, alpha, spread=0.6, grav=0.0, drag=1.6):
         if count <= 0:
             return
         k = min(count, MAX - self.n)
@@ -34,6 +36,8 @@ class Particles:
         self.grow[i:i + k] = grow
         self.col[i:i + k] = col
         self.alpha[i:i + k] = alpha
+        self.grav[i:i + k] = grav
+        self.drag[i:i + k] = drag
         self.n += k
 
     def update(self, dt):
@@ -45,13 +49,13 @@ class Particles:
         if not alive.all():
             idx = np.nonzero(alive)[0]
             m = len(idx)
-            for a in (self.pos, self.vel, self.life, self.max_life, self.size, self.grow, self.col, self.alpha):
+            for a in (self.pos, self.vel, self.life, self.max_life, self.size, self.grow, self.col, self.alpha, self.grav, self.drag):
                 a[:m] = a[idx]
             self.n = n = m
         if n == 0:
             return
-        self.vel[:n] *= (1.0 - 1.6 * dt)
-        self.vel[:n, 1] += 0.55 * dt                      # dust drifts up a little
+        self.vel[:n] *= (1.0 - self.drag[:n] * dt)[:, None]
+        self.vel[:n, 1] += np.where(self.grav[:n] > 0, -self.grav[:n], 0.55) * dt     # dust drifts up, chunks fall
         self.pos[:n] += self.vel[:n] * dt
         self.size[:n] += self.grow[:n] * dt
 
