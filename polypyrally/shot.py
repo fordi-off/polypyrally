@@ -30,12 +30,12 @@ def render_still(path, size=(1280, 720), seed=3, s=300.0, msaa=4, cam=(8.0, 2.6,
     wh = r.mesh(car_model.wheel())
     fr = Frame()
     fr.time = 1.0
-    cy = y + 0.62
+    cy = y + 0.47
     R = rot_y(-th)
     mdl = transform(R, (x, cy, z))
     fr.models.append((car, mdl, 0.9))
-    for wx, wz in ((1.28, 1.0), (1.28, -1.0), (-1.32, 1.0), (-1.32, -1.0)):
-        m = transform(R, (x, cy, z)) @ transform(np.eye(3), (wx, -0.2, wz))
+    for wx, wz in ((1.0, 0.8), (1.0, -0.8), (-1.55, 0.8), (-1.55, -0.8)):
+        m = transform(R, (x, cy, z)) @ transform(np.eye(3), (wx, -0.16, wz))
         if wz < 0:
             m = m @ transform(rot_y(math.pi), (0, 0, 0))
         fr.models.append((wh, m, 0.0))

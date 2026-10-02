@@ -30,41 +30,42 @@ class Engine:
 
 @dataclass
 class CarSpec:
-    name: str = 'Zephyr GT'
-    mass: float = 1350.0
-    inertia: tuple = (520.0, 1900.0, 2150.0)          # about x (roll), y (yaw), z (pitch)
-    wheel_r: float = 0.33
-    wheel_i: float = 1.2
-    wheel_x: tuple = (1.28, -1.32)                    # front, rear axle positions (body x)
-    wheel_z: float = 0.98                             # half track
-    mount_y: float = 0.14
-    l0: float = 0.40                                  # suspension length at rest (attach point -> wheel centre)
-    travel_up: float = 0.20
-    travel_down: float = 0.17
-    k: tuple = (38000.0, 34000.0)                     # spring rate, front / rear (N/m at the wheel)
-    c_bump: tuple = (3100.0, 2900.0)
-    c_reb: tuple = (5200.0, 4800.0)
-    arb: tuple = (17000.0, 9000.0)
+    """A front-drive rally hatchback: 1150 kg, 61 % of it over the front axle, centre of mass low and forward."""
+    name: str = 'Pulse GTR hatch'
+    mass: float = 1150.0
+    inertia: tuple = (400.0, 1650.0, 1500.0)          # about x (roll), y (yaw), z (pitch)
+    wheel_r: float = 0.31
+    wheel_i: float = 1.0
+    wheel_x: tuple = (1.00, -1.55)                    # front, rear axle positions (body x); wheelbase 2.55 m
+    wheel_z: float = 0.77                             # half track
+    mount_y: float = 0.12
+    l0: float = 0.36                                  # suspension length at rest (attach point -> wheel centre)
+    travel_up: float = 0.17
+    travel_down: float = 0.15
+    k: tuple = (34000.0, 24000.0)                     # spring rate, front / rear (N/m at the wheel)
+    c_bump: tuple = (3000.0, 2100.0)
+    c_reb: tuple = (5400.0, 3900.0)
+    arb: tuple = (15000.0, 5000.0)
     engine: Engine = field(default_factory=lambda: Engine(
-        [(0, 150), (1000, 230), (2000, 330), (3000, 450), (4000, 520), (5000, 530), (5500, 520), (6500, 480), (7200, 400), (7700, 250), (8200, 0)],
-        idle=1000.0, redline=7600.0, inertia=0.16))
-    torque_scale: float = 0.82
-    gears: tuple = (3.4, 2.3, 1.7, 1.35, 1.1, 0.9)
-    reverse: float = 3.2
-    final: float = 4.2
+        [(0, 110), (1000, 190), (1600, 300), (2200, 420), (3000, 470), (4500, 470), (5500, 440), (6300, 390), (6900, 310), (7300, 180), (7700, 0)],
+        idle=950.0, redline=7000.0, inertia=0.14))
+    torque_scale: float = 0.86
+    gears: tuple = (3.6, 2.2, 1.55, 1.18, 0.95, 0.78)
+    reverse: float = 3.4
+    final: float = 4.4
     eta: float = 0.9
-    clutch_cap: float = 900.0
-    front_split: float = 1.0                         # share of drive torque to the front axle (1.0 = front-wheel drive)
-    brake_torque: float = 2300.0
-    brake_bias: float = 0.62
-    cd_a: float = 0.68
-    down_c: float = 0.5
-    steer_max: float = 0.46
-    steer_fast: float = 0.10
+    clutch_cap: float = 850.0
+    front_split: float = 1.0                          # share of drive torque to the front axle (1.0 = front-wheel drive)
+    brake_torque: float = 2000.0
+    brake_bias: float = 0.66
+    cd_a: float = 0.66
+    down_c: float = 0.25
+    steer_max: float = 0.36
+    steer_fast: float = 0.05
 
 
 RALLY = CarSpec()
-PEAK_C = 1.55
+PEAK_C = 1.45
 
 
 def _tyre_curve(s):
@@ -78,7 +79,7 @@ TYRE_SLOPE = PEAK_C * B_TYRE
 
 class Wheel:
     __slots__ = ('ax', 'az', 'front', 'k', 'cb', 'cr', 'om', 'angle', 'steer', 'x', 'comp', 'load', 'contact', 'Fx', 'Fy',
-                 'slip', 'cx', 'cy', 'cz', 'hx', 'hy', 'hz', 'mu', 'side', 'surf')
+                 'slip', 'cx', 'cy', 'cz', 'hx', 'hy', 'hz', 'mu', 'side', 'surf', 'kappa')
 
     def __init__(self, ax, az, front, k, cb, cr):
         self.ax, self.az, self.front, self.k, self.cb, self.cr = ax, az, front, k, cb, cr
@@ -92,6 +93,7 @@ class Wheel:
         self.contact = False
         self.Fx = self.Fy = 0.0
         self.slip = 0.0
+        self.kappa = 0.0
         self.cx = self.cy = self.cz = 0.0
         self.hx = self.hy = self.hz = 0.0
         self.mu = 0.8
@@ -101,12 +103,15 @@ class Wheel:
 def _surface(stage, x, z):
     """(peak friction, rolling resistance) from the distance to the road."""
     d = stage.road_distance(x, z)
-    if d < 3.1:
-        return 0.82, 0.022
-    if d < 6.0:
-        t = (d - 3.1) / 2.9
-        return 0.82 - 0.14 * t, 0.022 + 0.028 * t
-    return 0.66, 0.06
+    if d < 2.3:                                   # the packed, worn driving line
+        return 0.96, 0.020
+    if d < 4.6:                                   # loose gravel toward the edges
+        t = (d - 2.3) / 2.3
+        return 0.96 - 0.11 * t, 0.020 + 0.018 * t
+    if d < 7.0:                                   # verge, then grass
+        t = (d - 4.6) / 2.4
+        return 0.85 - 0.22 * t, 0.038 + 0.04 * t
+    return 0.63, 0.078
 
 
 class Car:
@@ -118,10 +123,11 @@ class Car:
         for i, ax in enumerate(s.wheel_x):
             for sgn in (1, -1):
                 self.wheels.append(Wheel(ax, sgn * s.wheel_z, i == 0, s.k[i], s.c_bump[i], s.c_reb[i]))
-        self.hull = [(2.1, -0.26, 0.82), (2.1, -0.26, -0.82), (-2.1, -0.26, 0.82), (-2.1, -0.26, -0.82), (0.0, -0.3, 0.0),
-                     (1.6, 0.18, 0.9), (1.6, 0.18, -0.9), (-1.6, 0.34, 0.9), (-1.6, 0.34, -0.9),
-                     (0.1, 0.84, 0.7), (0.1, 0.84, -0.7), (-0.75, 0.82, 0.68), (-0.75, 0.82, -0.68), (2.18, 0.0, 0.0), (-2.18, 0.2, 0.0)]
+        self.hull = [(1.9, -0.26, 0.78), (1.9, -0.26, -0.78), (-1.95, -0.26, 0.78), (-1.95, -0.26, -0.78), (0.0, -0.3, 0.0),
+                     (1.6, 0.2, 0.8), (1.6, 0.2, -0.8), (-1.9, 0.34, 0.8), (-1.9, 0.34, -0.8),
+                     (-0.1, 0.94, 0.68), (-0.1, 0.94, -0.68), (-1.25, 0.93, 0.68), (-1.25, 0.93, -0.68), (1.98, 0.0, 0.0), (-2.0, 0.3, 0.0)]
         self.auto = False                                  # manual gearbox: Q / E shift
+        self.tc = True                                     # traction control assist
         self.reset(0.0, 0.0, 0.0, 0.0)
         self.t = 0.0
 
@@ -139,11 +145,14 @@ class Car:
         self.shift_t = 0.0
         self.cool = 0.0
         self.steer = 0.0
+        self.steer_in = 0.0
+        self.boost = 0.0
         self.thr = 0.0
         self.brk = 0.0
         self.hb = 0.0
         self.rpm = self.spec.engine.idle
         self.Te = 0.0
+        self.tc_active = False
         self.Tc = 0.0
         self.hit = 0.0
         self.air = 0.0
@@ -195,9 +204,12 @@ class Car:
         self.brk += max(-dt * 8.0, min(dt * 7.0, brk - self.brk))
         self.hb = hb
         sp = abs(self.speed)
-        lim = s.steer_max + (s.steer_fast - s.steer_max) * min(1.0, sp / 55.0)
-        target = steer * lim
-        rate = 2.6 if abs(target) > abs(self.steer) else 4.0
+        # keyboard-friendly: the input itself ramps (slowly out, quickly back to centre), and the lock shrinks with speed
+        r_in = 2.2 if abs(steer) > abs(self.steer_in) and steer * self.steer_in >= 0 else 5.0
+        self.steer_in += max(-dt * r_in, min(dt * r_in, steer - self.steer_in))
+        lim = s.steer_fast + (s.steer_max - s.steer_fast) / (1.0 + (sp / 12.0) ** 1.6)
+        target = self.steer_in * lim
+        rate = 1.8 if abs(target) > abs(self.steer) else 3.0
         self.steer += max(-dt * rate, min(dt * rate, target - self.steer))
         if self.shift_t <= 0:
             if up and self.gear < len(s.gears):
@@ -236,11 +248,22 @@ class Car:
         eng = s.engine
         rpm = self.eng_w * 30 / math.pi
         thr = self.thr
+        self.tc_active = False
+        if self.tc and thr > 0.0:                      # traction control: back off when the driven tyres spin past their peak
+            kmax = max((wl.kappa for wl in wheels if wl.contact and (wl.front or s.front_split < 0.999)), default=0.0)
+            if kmax > 0.13:
+                f = 1.0 - (kmax - 0.13) / 0.22
+                thr *= 0.2 if f < 0.2 else f
+                self.tc_active = True
         if self.cool > 0:
             self.cool -= dt
         if self.shift_t > 0:
             self.shift_t -= dt
-        full = eng.torque(rpm) * s.torque_scale if rpm < eng.redline else 0.0
+        x = (rpm - 1500.0) / 1500.0
+        x = 0.0 if x < 0.0 else (1.0 if x > 1.0 else x)
+        tgt = thr * x * x * (3 - 2 * x)
+        self.boost += (tgt - self.boost) * min(1.0, dt / (0.40 if tgt > self.boost else 0.15))      # turbo spool
+        full = eng.torque(rpm) * s.torque_scale * (0.66 + 0.34 * self.boost) if rpm < eng.redline else 0.0
         Te = full * thr - (eng.brake0 + eng.brake1 * rpm) * (1.0 - thr)
         if rpm < eng.idle:                       # idle governor
             Te += (eng.idle - rpm) * 0.35
@@ -388,6 +411,7 @@ class Car:
             Fmax = mu * Fs
             den_v = abs(vlong) + 1.4
             sx = wl.om * Rw - vlong
+            wl.kappa = sx / den_v
             sk = sx / den_v / 0.15
             sa = -vlat / den_v / 0.20
             if sk > 3.0:                                  # a spinning tyre still keeps some sideways grip

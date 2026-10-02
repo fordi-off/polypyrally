@@ -30,6 +30,23 @@ def _noise_loop(seed, k1, k2, secs=3):
     return (x * 0.6 * 32767).astype(np.int16)
 
 
+def _whistle(freq):
+    n = int(round(freq * 0.4)) / freq * SR
+    n = int(n)
+    t = np.arange(n) / n * round(freq * 0.4) * math.tau
+    w = np.sin(t) + 0.35 * np.sin(2 * t + 0.4) + 0.12 * np.sin(3 * t)
+    return (w * 0.22 * 32767).astype(np.int16)
+
+
+def _burst(secs, seed, hp=0.9, decay=7.0):
+    rng = np.random.default_rng(seed)
+    n = int(SR * secs)
+    x = rng.standard_normal(n)
+    x = x - np.convolve(x, np.ones(8) / 8, mode='same') * hp           # crude high-pass
+    x *= np.exp(-np.arange(n) / n * decay)
+    return (x / np.abs(x).max() * 0.55 * 32767).astype(np.int16)
+
+
 class Audio:
     def __init__(self, spec, enabled=True):
         self.ok = False
@@ -52,6 +69,15 @@ class Audio:
             self.wind = pygame.mixer.Channel(2)
             self.gravel = pygame.mixer.Channel(3)
             self.skid = pygame.mixer.Channel(4)
+            self.turbo = [pygame.mixer.Channel(5), pygame.mixer.Channel(6)]
+            self.fx = pygame.mixer.Channel(7)
+            self.whistles = [pygame.mixer.Sound(buffer=_whistle(f).tobytes()) for f in (1300, 1900, 2700, 3700)]
+            self.blow = pygame.mixer.Sound(buffer=_burst(0.55, 4, 0.95, 5.0).tobytes())
+            self.pops = [pygame.mixer.Sound(buffer=_burst(0.09, 30 + i, 0.2, 9.0).tobytes()) for i in range(4)]
+            self.tcur = [None, None]
+            self.prev_thr = 0.0
+            self.pop_t = 0.0
+            self.rng = np.random.default_rng(8)
             self.wind.play(pygame.mixer.Sound(buffer=_noise_loop(3, 70, 30).tobytes()), loops=-1)
             self.gravel.play(pygame.mixer.Sound(buffer=_noise_loop(9, 9, 4).tobytes()), loops=-1)
             self.skid.play(pygame.mixer.Sound(buffer=_noise_loop(21, 5, 3).tobytes()), loops=-1)
@@ -64,7 +90,7 @@ class Audio:
     def stop(self):
         if self.ok:
             try:
-                for c in self.ch + [self.wind, self.gravel, self.skid]:
+                for c in self.ch + [self.wind, self.gravel, self.skid] + self.turbo + [self.fx]:
                     c.stop()
             except pygame.error:
                 pass
@@ -76,7 +102,8 @@ class Audio:
         rpm = min(max(car.rpm, self.rpms[0]), self.rpms[-1] - 1)
         pos = (rpm - self.rpms[0]) / self.step
         i, frac = int(pos), pos - int(pos)
-        gain = (0.18 + 0.5 * car.thr) * self.volume
+        rf = min(1.0, car.rpm / 7000.0)
+        gain = (0.14 + 0.78 * car.thr * (0.45 + 0.55 * rf)) * self.volume
         for layer, vol in ((i, (1 - frac) * gain), (i + 1, frac * gain)):
             slot = layer & 1
             if self.cur[slot] != layer:
@@ -89,3 +116,24 @@ class Audio:
         slip = max((w.slip for w in car.wheels if w.contact), default=0.0)
         self.gravel.set_volume(min(1.0, sp / 35.0) * (grounded / 4.0) * 0.45 * self.volume)
         self.skid.set_volume(min(1.0, max(0.0, slip - 1.2) * 0.4) * min(1.0, sp / 8.0) * 0.5 * self.volume)
+        # turbo whistle: pitch follows rpm, level follows boost
+        pos_w = min(2.999, max(0.0, (rf - 0.25) / 0.75 * 3.0))
+        iw, fw = int(pos_w), pos_w - int(pos_w)
+        wg = car.boost * (0.25 + 0.75 * rf) * 0.22 * self.volume
+        for layer, vol in ((iw, (1 - fw) * wg), (iw + 1, fw * wg)):
+            slot = layer & 1
+            if self.tcur[slot] != layer:
+                self.turbo[slot].play(self.whistles[layer], loops=-1)
+                self.tcur[slot] = layer
+            self.turbo[slot].set_volume(max(0.0, min(1.0, vol)))
+        # blow-off valve when the throttle is lifted on boost, exhaust pops on the overrun
+        if self.prev_thr > 0.6 and car.thr < 0.3 and car.boost > 0.45:
+            self.fx.play(self.blow)
+            self.fx.set_volume(min(1.0, 0.4 * car.boost) * self.volume)
+        self.pop_t -= 1 / 60
+        if car.thr < 0.05 and car.rpm > 4200 and self.pop_t <= 0 and not self.fx.get_busy():
+            self.pop_t = 0.06 + self.rng.random() * 0.2
+            if self.rng.random() < 0.45:
+                self.fx.play(self.pops[int(self.rng.integers(4))])
+                self.fx.set_volume(0.5 * self.volume)
+        self.prev_thr = car.thr

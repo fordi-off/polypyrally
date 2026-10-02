@@ -2,18 +2,21 @@
 import math
 from .meshkit import MeshBuilder
 
-# x, y_bottom, y_belt, y_roof, w_bottom, w_belt, w_roof
+# x, y_bottom, y_belt, y_roof, w_bottom, w_belt, w_roof        (origin = centre of mass, ground is 0.47 m below)
 STATIONS = [
-    (2.18, -0.22, 0.02, 0.05, 0.68, 0.82, 0.72),
-    (1.86, -0.30, 0.13, 0.16, 0.82, 0.92, 0.84),
-    (1.30, -0.33, 0.27, 0.30, 0.86, 0.95, 0.88),
-    (0.92, -0.33, 0.33, 0.36, 0.86, 0.95, 0.88),
-    (0.12, -0.33, 0.35, 0.82, 0.86, 0.95, 0.72),
-    (-0.72, -0.33, 0.37, 0.80, 0.86, 0.96, 0.70),
-    (-1.50, -0.32, 0.36, 0.54, 0.86, 0.97, 0.76),
-    (-1.95, -0.30, 0.33, 0.38, 0.84, 0.94, 0.82),
-    (-2.18, -0.26, 0.28, 0.32, 0.78, 0.88, 0.76),
+    (1.96, -0.27, 0.03, 0.06, 0.66, 0.78, 0.70),
+    (1.68, -0.29, 0.19, 0.22, 0.78, 0.85, 0.80),
+    (1.00, -0.30, 0.30, 0.34, 0.82, 0.88, 0.84),
+    (0.62, -0.30, 0.34, 0.37, 0.82, 0.88, 0.84),
+    (-0.10, -0.30, 0.40, 0.93, 0.82, 0.88, 0.72),
+    (-1.25, -0.30, 0.42, 0.93, 0.82, 0.89, 0.72),
+    (-1.88, -0.28, 0.40, 0.64, 0.82, 0.88, 0.74),
+    (-2.02, -0.26, 0.30, 0.34, 0.78, 0.85, 0.76),
 ]
+WHEEL_X = (1.00, -1.55)
+WHEEL_Y = -0.16
+WHEEL_Z = 0.80
+TIRE_R = 0.31
 GLASS = (22, 30, 40)
 DARK = (22, 22, 26)
 
@@ -48,7 +51,7 @@ def body(paint, stripe=(236, 236, 240)):
             _out(b, [(x0, ye0, sgn * we0), (x1, ye1, sgn * we1), (x1, yr1, sgn * wr1), (x0, yr0, sgn * wr0)], GLASS if glass else paint)
         _out(b, [(x0, yb0, wb0), (x0, yb0, -wb0), (x1, yb1, -wb1), (x1, yb1, wb1)], DARK)
         mid = (x0 + x1) / 2
-        glass_top = (0.12 < mid < 0.92) or (-1.5 < mid < -0.72)
+        glass_top = (-0.1 < mid < 0.62) or (-1.88 < mid < -1.25)
         for k, (lo, hi) in enumerate(((0.0, 0.3), (0.3, 0.72), (0.72, 1.0))):
             col = GLASS if glass_top else (stripe if k == 1 else paint)
             for sgn in (1, -1):
@@ -56,22 +59,23 @@ def body(paint, stripe=(236, 236, 240)):
     for idx in (0, -1):
         x, yb, ye, yr, wb, we, wr = S[idx]
         _out(b, [(x, yb, wb), (x, ye, we), (x, yr, wr), (x, yr, -wr), (x, ye, -we), (x, yb, -wb)], dark_paint)
-    b.box(2.17, -0.18, 0.0, 0.20, 0.16, 1.5, DARK)
-    b.box(2.12, -0.30, 0.0, 0.36, 0.05, 1.6, (30, 30, 34))
-    b.box(-2.17, -0.18, 0.0, 0.2, 0.16, 1.5, DARK)
-    for s in (1, -1):
-        b.box(2.14, 0.10, s * 0.62, 0.10, 0.12, 0.30, (255, 238, 190), em=0.55)
-        b.box(2.17, -0.05, s * 0.55, 0.08, 0.08, 0.22, (255, 150, 40), em=0.2)
-        b.box(-2.19, 0.18, s * 0.66, 0.06, 0.12, 0.36, (255, 30, 24), em=0.45)
-        for ax in (1.28, -1.32):
-            _arch(b, ax, s)
-        b.box(0.62, 0.42, s * 1.04, 0.16, 0.10, 0.12, DARK)
-        b.box(0.0, -0.30, s * 0.97, 1.5, 0.06, 0.06, (34, 34, 38))
-        _disc(b, (-0.2, 0.16, s * 0.965), s, 0.20, (244, 244, 248))
-        b.box(-1.98, 0.40, s * 0.62, 0.1, 0.22, 0.06, (28, 28, 32))
-    b.box(-0.3, 0.84, 0.0, 0.7, 0.07, 0.3, DARK)
-    b.box(-2.02, 0.50, 0.0, 0.34, 0.04, 1.5, (28, 28, 32))
-    _disc(b, (1.30, 0.285, 0.0), 0, 0.26, (244, 244, 248), top=True)
+    b.box(1.93, -0.19, 0.0, 0.18, 0.16, 1.45, DARK)
+    b.box(1.88, -0.30, 0.0, 0.3, 0.05, 1.5, (30, 30, 34))
+    b.box(-2.0, -0.19, 0.0, 0.16, 0.16, 1.45, DARK)
+    for s_ in (1, -1):
+        b.box(1.93, 0.12, s_ * 0.56, 0.08, 0.11, 0.30, (255, 238, 190), em=0.55)
+        b.box(1.95, -0.03, s_ * 0.52, 0.07, 0.07, 0.2, (255, 150, 40), em=0.2)
+        b.box(-2.04, 0.24, s_ * 0.66, 0.06, 0.16, 0.2, (255, 30, 24), em=0.45)
+        for ax in WHEEL_X:
+            _arch(b, ax, s_)
+        b.box(0.45, 0.46, s_ * 0.98, 0.16, 0.10, 0.12, DARK)
+        b.box(-0.3, -0.30, s_ * 0.88, 2.2, 0.06, 0.06, (34, 34, 38))
+        _disc(b, (-0.55, 0.16, s_ * 0.895), s_, 0.19, (244, 244, 248))
+    b.box(-0.55, 0.97, 0.0, 0.8, 0.06, 0.32, DARK)                     # roof vent
+    b.box(-1.94, 0.70, 0.0, 0.28, 0.04, 1.35, (28, 28, 32))            # hatch spoiler
+    for s_ in (1, -1):
+        b.box(-1.9, 0.62, s_ * 0.6, 0.08, 0.16, 0.05, (28, 28, 32))
+    _disc(b, (1.35, 0.205, 0.0), 0, 0.24, (244, 244, 248), top=True)
     return b.build()
 
 
@@ -91,8 +95,8 @@ def _arch(b, ax, s):
     pts = []
     for i in range(n + 1):
         a = math.pi * i / n
-        pts.append((ax + math.cos(a) * 0.46, -0.20 + math.sin(a) * 0.46 * 0.95, s * 0.96))
-    cx = (ax, -0.20, s * 0.96)
+        pts.append((ax + math.cos(a) * 0.42, WHEEL_Y + math.sin(a) * 0.42 * 0.95, s * 0.89))
+    cx = (ax, WHEEL_Y, s * 0.89)
     for i in range(n):
         _out(b, [cx, pts[i], pts[i + 1]], (14, 14, 18))
 
@@ -100,7 +104,7 @@ def _arch(b, ax, s):
 def wheel():
     """Tyre + rim, axis along z, centred at the origin."""
     b = MeshBuilder()
-    R, W, n = 0.33, 0.14, 14
+    R, W, n = TIRE_R, 0.115, 14
     for i in range(n):
         a0, a1 = i * math.tau / n, (i + 1) * math.tau / n
         c0, s0, c1, s1 = math.cos(a0), math.sin(a0), math.cos(a1), math.sin(a1)
@@ -120,7 +124,7 @@ def wheel():
 def wheel_blur():
     """Fast-spinning wheel: no visible pattern (so it can't alias into a backwards-looking spin), like motion blur."""
     b = MeshBuilder()
-    R, W, n = 0.33, 0.14, 14
+    R, W, n = TIRE_R, 0.115, 14
     r2 = R * 0.62
     for i in range(n):
         a0, a1 = i * math.tau / n, (i + 1) * math.tau / n

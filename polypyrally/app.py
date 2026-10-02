@@ -101,6 +101,9 @@ def run(args):
                 elif k == pygame.K_t:
                     game.car.auto = not game.car.auto
                     game.toast, game.toast_t = ('Automatic gearbox' if game.car.auto else 'Manual gearbox'), 1.2
+                elif k == pygame.K_y:
+                    game.car.tc = not game.car.tc
+                    game.toast, game.toast_t = ('Traction control ON' if game.car.tc else 'Traction control OFF'), 1.2
                 elif k == pygame.K_F3:
                     game.show_fps = not game.show_fps
                 elif k == pygame.K_F12:

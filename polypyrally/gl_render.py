@@ -19,8 +19,11 @@ class GLMesh:
         self.vaos = {}
 
     def vao(self, key, prog, inst=None):
-        k = (key, id(inst))
-        v = self.vaos.get(k)
+        # instanced draws cache their VAO on the instance buffer itself, so it dies with that buffer
+        # (keying on id(inst) let a recycled id hand back a VAO pointing at a deleted buffer: flickering objects)
+        cache = self.vaos if inst is None else inst.vaos
+        k = key if inst is None else (key, id(self))
+        v = cache.get(k)
         if v is None:
             if key.endswith('depth'):
                 content = [(self.vbo, '3f 8x4', 'in_pos')]
@@ -28,7 +31,7 @@ class GLMesh:
                 content = [(self.vbo, VFMT, 'in_pos', 'in_nrm', 'in_col', 'in_ex')]
             if inst is not None:
                 content.append((inst.vbo, '3f 4f/i', 'i_pos', 'i_misc'))
-            v = self.vaos[k] = self.ctx.vertex_array(prog, content)
+            v = cache[k] = self.ctx.vertex_array(prog, content)
         return v
 
     def release(self):
@@ -39,13 +42,17 @@ class GLMesh:
 
 
 class GLInstances:
-    __slots__ = ('vbo', 'n')
+    __slots__ = ('vbo', 'n', 'vaos')
 
     def __init__(self, ctx, data):
         self.n = len(data)
+        self.vaos = {}
         self.vbo = ctx.buffer(np.ascontiguousarray(data, dtype=np.float32).tobytes())
 
     def release(self):
+        for v in self.vaos.values():
+            v.release()
+        self.vaos = {}
         self.vbo.release()
 
 
