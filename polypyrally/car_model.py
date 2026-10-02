@@ -115,3 +115,21 @@ def wheel():
             col = (196, 198, 206) if i % 2 == 0 else (150, 152, 162)
             b.tri(*(rim if sgn > 0 else rim[::-1]), col)
     return b.build()
+
+
+def wheel_blur():
+    """Fast-spinning wheel: no visible pattern (so it can't alias into a backwards-looking spin), like motion blur."""
+    b = MeshBuilder()
+    R, W, n = 0.33, 0.14, 14
+    r2 = R * 0.62
+    for i in range(n):
+        a0, a1 = i * math.tau / n, (i + 1) * math.tau / n
+        c0, s0, c1, s1 = math.cos(a0), math.sin(a0), math.cos(a1), math.sin(a1)
+        b.quad((c0 * R, s0 * R, W), (c1 * R, s1 * R, W), (c1 * R, s1 * R, -W), (c0 * R, s0 * R, -W), (27, 27, 31))
+        for sgn in (1, -1):
+            zz = sgn * W
+            ring = [(c0 * R, s0 * R, zz), (c1 * R, s1 * R, zz), (c1 * r2, s1 * r2, zz * 1.04), (c0 * r2, s0 * r2, zz * 1.04)]
+            b.quad(*(ring if sgn > 0 else ring[::-1]), (18, 18, 22))
+            rim = [(c0 * r2, s0 * r2, zz * 1.04), (c1 * r2, s1 * r2, zz * 1.04), (0, 0, zz * 1.04)]
+            b.tri(*(rim if sgn > 0 else rim[::-1]), (122, 124, 132))
+    return b.build()

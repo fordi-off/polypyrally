@@ -33,6 +33,7 @@ class Game:
         self.audio = None
         self.car_mesh = renderer.mesh(car_model.body(self.paint))
         self.wheel_mesh = renderer.mesh(car_model.wheel())
+        self.wheel_fast = renderer.mesh(car_model.wheel_blur())
         self.load_stage(seed)
 
     # ------------------------------------------------------------------ stage lifecycle
@@ -163,7 +164,8 @@ class Game:
             # steer about the body's up axis, spin about the axle (body z); left wheels are mirrored
             S = R @ _roty_body(-wl.steer if wl.front else 0.0)
             M = transform(S @ rot_z(-wl.angle) @ (np.diag([1, 1, -1.0]) if wl.side < 0 else np.eye(3)), hub)
-            fr.models.append((self.wheel_mesh, M, 0.0))
+            fast = abs(wl.om) * (1 / 60.0) > 0.26            # > ~15 deg per frame: switch to the blurred wheel
+            fr.models.append((self.wheel_fast if fast else self.wheel_mesh, M, 0.0))
         # brake lights are baked emissive; add dust
         right = np.cross(np.array(self.cam.forward), (0, 1, 0))
         right /= (np.linalg.norm(right) + 1e-9)
