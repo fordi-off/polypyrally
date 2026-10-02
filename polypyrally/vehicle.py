@@ -54,7 +54,7 @@ class CarSpec:
     final: float = 4.2
     eta: float = 0.9
     clutch_cap: float = 900.0
-    front_split: float = 0.42
+    front_split: float = 1.0                         # share of drive torque to the front axle (1.0 = front-wheel drive)
     brake_torque: float = 2300.0
     brake_bias: float = 0.62
     cd_a: float = 0.68
@@ -121,6 +121,7 @@ class Car:
         self.hull = [(2.1, -0.26, 0.82), (2.1, -0.26, -0.82), (-2.1, -0.26, 0.82), (-2.1, -0.26, -0.82), (0.0, -0.3, 0.0),
                      (1.6, 0.18, 0.9), (1.6, 0.18, -0.9), (-1.6, 0.34, 0.9), (-1.6, 0.34, -0.9),
                      (0.1, 0.84, 0.7), (0.1, 0.84, -0.7), (-0.75, 0.82, 0.68), (-0.75, 0.82, -0.68), (2.18, 0.0, 0.0), (-2.18, 0.2, 0.0)]
+        self.auto = False                                  # manual gearbox: Q / E shift
         self.reset(0.0, 0.0, 0.0, 0.0)
         self.t = 0.0
 
@@ -135,7 +136,6 @@ class Car:
         self.w = [0.0, 0.0, 0.0]
         self.eng_w = self.spec.engine.idle * math.pi / 30
         self.gear = 1
-        self.auto = True
         self.shift_t = 0.0
         self.cool = 0.0
         self.steer = 0.0
@@ -199,10 +199,13 @@ class Car:
         target = steer * lim
         rate = 2.6 if abs(target) > abs(self.steer) else 4.0
         self.steer += max(-dt * rate, min(dt * rate, target - self.steer))
-        if up and self.shift_t <= 0 and self.gear < len(s.gears):
-            self._shift(self.gear + 1)
-        if down and self.shift_t <= 0 and self.gear > 1:
-            self._shift(self.gear - 1)
+        if self.shift_t <= 0:
+            if up and self.gear < len(s.gears):
+                self._shift(self.gear + 1 if self.gear > 0 else 1)
+            elif down and self.gear > 1:
+                lower = self.rpm * s.gears[self.gear - 2] / s.gears[self.gear - 1]
+                if lower < s.engine.redline * 1.1:           # refuse a downshift that would over-rev the engine
+                    self._shift(self.gear - 1)
 
     def _shift(self, g):
         self.gear = g
@@ -265,9 +268,10 @@ class Car:
         # limited-slip couplings (centre + both axles): torque goes to the slower side
         omf = 0.5 * (wheels[0].om + wheels[1].om)
         omr = 0.5 * (wheels[2].om + wheels[3].om)
-        cb = max(-900.0, min(900.0, 60.0 * (omr - omf)))
-        bf = max(-700.0, min(700.0, 160.0 * (wheels[1].om - wheels[0].om)))
-        br = max(-700.0, min(700.0, 160.0 * (wheels[3].om - wheels[2].om)))
+        awd = 0.001 < s.front_split < 0.999
+        cb = max(-900.0, min(900.0, 60.0 * (omr - omf))) if awd else 0.0
+        bf = max(-700.0, min(700.0, 160.0 * (wheels[1].om - wheels[0].om))) if s.front_split > 0.001 else 0.0
+        br = max(-700.0, min(700.0, 160.0 * (wheels[3].om - wheels[2].om))) if s.front_split < 0.999 else 0.0
         Tdrv = (Tw_total * wts[0] + cb * 0.5 + bf, Tw_total * wts[1] + cb * 0.5 - bf,
                 Tw_total * wts[2] - cb * 0.5 + br, Tw_total * wts[3] - cb * 0.5 - br)
         # ---------------- aero
@@ -386,6 +390,10 @@ class Car:
             sx = wl.om * Rw - vlong
             sk = sx / den_v / 0.15
             sa = -vlat / den_v / 0.20
+            if sk > 3.0:                                  # a spinning tyre still keeps some sideways grip
+                sk = 3.0
+            elif sk < -3.0:
+                sk = -3.0
             sm = math.sqrt(sk * sk + sa * sa)
             if sm > 1e-6:
                 f = Fmax * math.sin(PEAK_C * math.atan(B_TYRE * sm))
@@ -510,16 +518,18 @@ class Car:
         return b
 
     def _auto_shift(self, thr):
+        """Shifts on the speed the wheels really have over the ground, not on engine rpm (which flares when they spin)."""
         s = self.spec
         e = s.engine
-        rpm = self.rpm
         if self.gear < 0:
             return
-        if rpm > e.redline * 0.93 and self.gear < len(s.gears) and thr > 0.2:
+        k = abs(self.speed) / s.wheel_r * s.final * 30 / math.pi
+        rpm_g = k * s.gears[self.gear - 1]
+        if rpm_g > e.redline * 0.88 and self.gear < len(s.gears) and thr > 0.2:
             self._shift(self.gear + 1)
         elif self.gear > 1:
-            lower = rpm * s.gears[self.gear - 2] / s.gears[self.gear - 1]
-            if rpm < e.redline * 0.38 and lower < e.redline * 0.82:
+            lower = k * s.gears[self.gear - 2]
+            if rpm_g < e.redline * 0.36 and lower < e.redline * 0.8:
                 self._shift(self.gear - 1)
 
     def _orthonormalise(self):

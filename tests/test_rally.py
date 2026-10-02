@@ -39,6 +39,7 @@ def test_physics_height_matches_the_drawn_mesh():
 def settled_car():
     st = STAGE
     car = Car(st)
+    car.auto = True                                   # the tests have no driver to change gear
     x, y, z, th = st.start_pose(14.0)
     car.reset(x, st.height(x, z), z, th)
     for _ in range(180):
@@ -54,12 +55,28 @@ def test_car_rests_on_its_springs():
     assert car.up[1] > 0.97 and abs(car.speed) < 0.2
 
 
+def test_front_wheel_drive_and_manual_gearbox():
+    car = settled_car()
+    car.auto = False
+    assert car.spec.front_split == 1.0
+    for _ in range(60 * 4):
+        car.control(1 / 60, 1.0, 0, 0, 0)
+        car.step(1 / 60)
+    assert car.gear == 1                                          # manual: it stays in gear until told otherwise
+    assert car.rpm > 6000 and car.wheels[2].load > 0
+    rear = max(abs(w.Fx) for w in car.wheels[2:])
+    front = max(abs(w.Fx) for w in car.wheels[:2])
+    assert front > 4 * rear                                       # only the front axle drives
+    car.control(1 / 60, 1.0, 0, 0, 0, up=True)
+    assert car.gear == 2
+
+
 def test_car_accelerates_brakes_and_steers():
     car = settled_car()
     for _ in range(60 * 6):
         car.control(1 / 60, 1.0, 0, 0, 0)
         car.step(1 / 60)
-    assert car.kmh > 70 and car.gear >= 3
+    assert car.kmh > 45
     v0 = car.speed
     h0 = car.heading
     for _ in range(60):

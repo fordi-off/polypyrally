@@ -98,6 +98,9 @@ def run(args):
                     game.restart()
                 elif k == pygame.K_n and game.state == 'finished':
                     game.new_stage()
+                elif k == pygame.K_t:
+                    game.car.auto = not game.car.auto
+                    game.toast, game.toast_t = ('Automatic gearbox' if game.car.auto else 'Manual gearbox'), 1.2
                 elif k == pygame.K_F3:
                     game.show_fps = not game.show_fps
                 elif k == pygame.K_F12:
@@ -106,9 +109,9 @@ def run(args):
                     fullscreen = not fullscreen
                     ctx = open_window(size, vsync=args.vsync, fullscreen=fullscreen)
                     raise SystemExit('Switching display modes needs a restart of the renderer - use --fullscreen')
-                elif k in (pygame.K_e,):
+                elif k == pygame.K_e:
                     pressed['up'] = True
-                elif k in (pygame.K_q,):
+                elif k == pygame.K_q:
                     pressed['down'] = True
         k = pygame.key.get_pressed()
         keys = {n: any(k[c] for c in codes) for n, codes in KEYS.items()}

@@ -166,7 +166,7 @@ class Game:
         for wl in car.wheels:
             hub = np.array((wl.hx, wl.hy, wl.hz))
             # steer about the body's up axis, spin about the axle (body z); left wheels are mirrored
-            S = R @ _roty_body(-wl.steer if wl.front else 0.0)
+            S = R @ _roty_body(wl.steer if wl.front else 0.0)
             M = transform(S @ rot_z(-wl.angle) @ (np.diag([1, 1, -1.0]) if wl.side < 0 else np.eye(3)), hub)
             fast = abs(wl.om) * (1 / 60.0) > 0.26            # > ~15 deg per frame: switch to the blurred wheel
             fr.models.append((self.wheel_fast if fast else self.wheel_mesh, M, 0.0))
@@ -180,5 +180,6 @@ class Game:
 
 
 def _roty_body(a):
+    """Rotation that turns the wheel's rolling direction (body +x) toward body +z (the right) for positive a."""
     c, s = math.cos(a), math.sin(a)
     return np.array([[c, 0, -s], [0, 1, 0], [s, 0, c]])

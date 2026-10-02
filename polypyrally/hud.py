@@ -104,7 +104,9 @@ class Hud:
         text(surf, '%d' % round(kmh), (cx, cy - 20 * u), int(104 * u), TEXT, 'c')
         text(surf, 'km/h', (cx, cy + 36 * u), int(26 * u), DIM, 'c')
         g = 'R' if car.gear < 0 else str(car.gear)
-        text(surf, g, (cx, cy + 74 * u), int(54 * u), ACCENT, 'c')
+        shift = car.rpm > e.redline * 0.9 and car.gear > 0
+        text(surf, g, (cx, cy + 74 * u), int(54 * u), WARN if shift else ACCENT, 'c')
+        text(surf, 'AUTO' if car.auto else 'MANUAL', (cx - 96 * u, cy + 88 * u), int(20 * u), DIM, 'c')
         text(surf, '%d' % round(car.rpm / 10) + '0', (cx + 96 * u, cy + 88 * u), int(22 * u), DIM, 'c')
         # ---------------- time + progress (top centre)
         panel(surf, (W / 2 - 170 * u, 14 * u, 340 * u, 92 * u), 14 * u)
@@ -128,7 +130,7 @@ class Hud:
         # ---------------- hints
         if game.state in ('countdown', 'run') and game.time < 14.0:
             a = 255 if game.time < 10 else int(255 * (14 - game.time) / 4)
-            hint = 'W/S gas & brake    A/D steer    SPACE handbrake    Q/E shift    C camera    R reset    ESC menu'
+            hint = 'W gas  S brake / reverse    A/D steer    SPACE handbrake    E/Q shift up/down    T auto/manual    C camera    R reset    ESC menu'
             img = font(int(24 * u)).render(hint, True, TEXT)
             img.set_alpha(a)
             surf.blit(img, (W / 2 - img.get_width() / 2, H - 40 * u))

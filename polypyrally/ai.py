@@ -14,6 +14,7 @@ class Driver:
         self.curv = np.convolve(np.pad(np.abs(k), (w, w), mode='edge'), np.ones(2 * w + 1) / (2 * w + 1), mode='same')[w:-w]
 
     def drive(self, car, dt):
+        car.auto = True
         st = self.st
         px, pz = car.p[0], car.p[2]
         self.idx = st.nearest(px, pz, self.idx, 40)
